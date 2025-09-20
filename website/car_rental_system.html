@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Rental System</title>
+    <!-- Tailwind CSS for rapid UI development -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for a clean, modern look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Link to the external stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="antialiased">
+
+    <div id="app" class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <!-- Main header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-white tracking-tight">Car Rental System</h1>
+            <p class="mt-2 text-lg text-gray-400">A modern, client-side rental management platform.</p>
+        </header>
+
+        <!-- Main content area where different views will be rendered -->
+        <main id="main-content">
+            <!-- The main menu will be rendered here initially -->
+        </main>
+    </div>
+
+    <!-- Modal container for pop-up dialogs -->
+    <div id="modal-container" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
+        <!-- Modal content will be injected here by JavaScript -->
+    </div>
+
+    <script type="module">
+        // --- DATA MODELS ---
+
+        class Car {
+            constructor(id, brand, model, basePrice, type) {
+                this.id = id;
+                this.brand = brand;
+                this.model = model;
+                this.basePrice = basePrice;
+                this.type = type; // e.g., 'SEDAN', 'SUV', 'SPORTS'
+                this.isAvailable = true;
+            }
+
+            calculatePrice(days) {
+                let currentPrice = this.basePrice;
+                if (this.type === 'SPORTS') currentPrice *= 1.20; // 20% surcharge
+                let totalPrice = currentPrice * days;
+                if (days > 7) totalPrice *= 0.90; // 10% discount
+                return totalPrice;
+            }
+        }
+
+        class Customer {
+            constructor(id, name, phone) {
+                this.id = id;
+                this.name = name;
+                this.phone = phone;
+            }
+        }
+
+        class Rental {
+            constructor(car, customer, days) {
+                this.car = car;
+                this.customer = customer;
+                this.days = days;
+                this.rentalDate = new Date();
+            }
+        }
+
+        class CompletedRental {
+            constructor(rental) {
+                this.car = rental.car;
+                this.customer = rental.customer;
+                this.daysRented = rental.days;
+                this.rentalDate = rental.rentalDate;
+                this.returnDate = new Date();
+                this.finalPrice = rental.car.calculatePrice(rental.days);
+            }
+        }
+
+        // --- CORE LOGIC & STATE MANAGEMENT ---
+
+        const App = {
+            // Data stores
+            cars: new Map(),
+            customers: new Map(),
+            activeRentals: [],
+            rentalHistory: [],
+            
+            // Initialization
+            init() {
+                this.setupInitialData();
+                this.renderMainMenu();
+            },
+
+            setupInitialData() {
+                // Add sample cars
+                [
+                    new Car("C001", "Toyota", "Camry", 60.0, "SEDAN"),
+                    new Car("C002", "Honda", "Accord", 70.0, "SEDAN"),
+                    new Car("C003", "Mahindra", "Thar", 150.0, "SUV"),
+                    new Car("C004", "Ford", "Mustang", 200.0, "SPORTS"),
+                    new Car("C005", "Maruti", "Swift", 50.0, "HATCHBACK"),
+                    new Car("C006", "BMW", "X5", 180.0, "SUV")
+                ].forEach(car => this.cars.set(car.id, car));
+
+                // Add sample customers
+                [
+                    new Customer("CUS001", "Alice Johnson", "555-1234"),
+                    new Customer("CUS002", "Bob Williams", "555-5678")
+                ].forEach(customer => this.customers.set(customer.id, customer));
+            },
+            
+            // --- UI RENDERING FUNCTIONS ---
+            
+            clearMainContent() {
+                document.getElementById('main-content').innerHTML = '';
+            },
+            
+            renderMainMenu() {
+                this.clearMainContent();
+                const content = document.getElementById('main-content');
+                content.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        ${this.createMenuButton('Rent a Car', 'handleRentCar', 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6')}
+                        ${this.createMenuButton('Return a Car', 'handleReturnCar', 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z')}
+                        ${this.createMenuButton('Search & View Cars', 'handleSearchCars', 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z')}
+                        ${this.createMenuButton('View Rented Cars', 'handleViewRented', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2')}
+                        ${this.createMenuButton('Rental History', 'handleRentalHistory', 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z')}
+                        ${this.createMenuButton('Manage Cars', 'handleManageCars', 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z')}
+                        ${this.createMenuButton('Manage Customers', 'handleManageCustomers', 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z')}
+                    </div>
+                `;
+            },
+            
+            createMenuButton(text, handler, svgPath) {
+                return `
+                    <button onclick="App.${handler}()" class="card p-6 text-left rounded-lg shadow-lg hover:shadow-blue-500/20 hover:-translate-y-1 transition-all duration-300">
+                        <div class="flex items-center gap-4">
+                            <div class="bg-blue-600 p-3 rounded-lg">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="${svgPath}" /></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-semibold text-white">${text}</h3>
+                            </div>
+                        </div>
+                    </button>
+                `;
+            },
+            
+            renderBackButton(handler = 'renderMainMenu') {
+                return `<button onclick="App.${handler}()" class="btn btn-secondary mb-6 inline-flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                    Back to Menu
+                </button>`;
+            },
+            
+            // --- HANDLERS FOR MENU ACTIONS ---
+
+            handleRentCar() {
+                this.clearMainContent();
+                const content = document.getElementById('main-content');
+                let carOptions = [...this.cars.values()]
+                    .filter(c => c.isAvailable)
+                    .map(c => `<option value="${c.id}">${c.brand} ${c.model} - $${c.basePrice.toFixed(2)}/day</option>`)
+                    .join('');
+
+                content.innerHTML = `
+                    ${this.renderBackButton()}
+                    <div class="card p-8 rounded-lg">
+                        <h2 class="text-3xl font-bold text-white mb-6">Rent a Car</h2>
+                        <form id="rent-form">
+                            <div class="mb-4">
+                                <label for="car-select" class="block mb-2 font-medium">Select a Car</label>
+                                <select id="car-select" class="form-input w-full p-2 rounded-md">${carOptions}</select>
+                                <p class="form-helper-text mt-1">Choose from the list of currently available vehicles.</p>
+                            </div>
+                             <div class="mb-4">
+                                <label class="block mb-2 font-medium">Customer Information</label>
+                                <div class="flex gap-4 mb-2">
+                                    <label class="flex items-center"><input type="radio" name="customer-type" value="existing" checked onchange="App.toggleCustomerFields(this.value)"> <span class="ml-2">Existing Customer</span></label>
+                                    <label class="flex items-center"><input type="radio" name="customer-type" value="new" onchange="App.toggleCustomerFields(this.value)"> <span class="ml-2">New Customer</span></label>
+                                </div>
+                            </div>
+                            <div id="existing-customer-fields" class="mb-4">
+                                <label for="customer-select" class="block mb-2 font-medium">Select Customer</label>
+                                <select id="customer-select" class="form-input w-full p-2 rounded-md">${[...this.customers.values()].map(c => `<option value="${c.id}">${c.name} (${c.id})</option>`).join('')}</select>
+                            </div>
+                             <div id="new-customer-fields" class="hidden space-y-4">
+                                <div>
+                                    <label for="customer-name" class="block mb-2 font-medium">Full Name</label>
+                                    <input type="text" id="customer-name" class="form-input w-full p-2 rounded-md" placeholder="e.g., Jane Doe">
+                                </div>
+                                <div>
+                                    <label for="customer-phone" class="block mb-2 font-medium">Phone Number</label>
+                                    <input type="tel" id="customer-phone" class="form-input w-full p-2 rounded-md" placeholder="e.g., 555-123-4567">
+                                </div>
+                            </div>
+                            <div class="mt-6">
+                                <label for="rental-days" class="block mb-2 font-medium">Number of Days</label>
+                                <input type="number" id="rental-days" min="1" class="form-input w-full p-2 rounded-md" placeholder="e.g., 5">
+                                <p class="form-helper-text mt-1">A 10% discount is applied for rentals longer than 7 days.</p>
+                            </div>
+                            <div class="mt-8">
+                                <button type="submit" class="btn btn-primary w-full md:w-auto px-6 py-3 rounded-md font-semibold">Proceed to Confirmation</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+
+                document.getElementById('rent-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.confirmRental();
+                });
+            },
+            
+            toggleCustomerFields(type) {
+                document.getElementById('existing-customer-fields').classList.toggle('hidden', type === 'new');
+                document.getElementById('new-customer-fields').classList.toggle('hidden', type === 'existing');
+            },
+
+            confirmRental() {
+                const carId = document.getElementById('car-select').value;
+                const days = parseInt(document.getElementById('rental-days').value);
+                const car = this.cars.get(carId);
+
+                if (!car || isNaN(days) || days <= 0) {
+                    this.showModal("Invalid Input", "Please select a valid car and enter a positive number for rental days.");
+                    return;
+                }
+
+                let customer;
+                const customerType = document.querySelector('input[name="customer-type"]:checked').value;
+                if (customerType === 'existing') {
+                    const customerId = document.getElementById('customer-select').value;
+                    customer = this.customers.get(customerId);
+                } else {
+                    const name = document.getElementById('customer-name').value;
+                    const phone = document.getElementById('customer-phone').value;
+                    if (!name || !phone) {
+                        this.showModal("Missing Information", "Please enter a name and phone for the new customer.");
+                        return;
+                    }
+                    const newId = "CUS" + String(this.customers.size + 1).padStart(3, '0');
+                    customer = new Customer(newId, name, phone);
+                }
+
+                const price = car.calculatePrice(days);
+                const priceBreakdown = this.getPriceBreakdownHTML(car, days);
+                
+                this.showModal(
+                    "Confirm Rental",
+                    `
+                    <div class="text-left space-y-4">
+                        <p>Please review the details below before confirming.</p>
+                        <div class="border-t border-b border-gray-600 py-4">${priceBreakdown}</div>
+                        <p class="text-xl font-bold">Customer: ${customer.name}</p>
+                    </div>`,
+                    () => {
+                        if (customerType === 'new') this.customers.set(customer.id, customer);
+                        car.isAvailable = false;
+                        this.activeRentals.push(new Rental(car, customer, days));
+                        this.showModal("Success!", `Car ${car.brand} ${car.model} has been rented to ${customer.name}.`, () => this.renderMainMenu());
+                    }
+                );
+            },
+
+            getPriceBreakdownHTML(car, days) {
+                let baseTotal = car.basePrice * days;
+                let finalPrice = car.calculatePrice(days);
+                let surcharge = (car.type === 'SPORTS' ? car.basePrice * 0.2 * days : 0);
+                let discount = (days > 7 ? (baseTotal + surcharge) * 0.1 : 0);
+                
+                let html = `
+                    <h4 class="text-lg font-semibold mb-2">Price Breakdown</h4>
+                    <div class="space-y-1">
+                        <p><strong>Car:</strong> ${car.brand} ${car.model} (${car.type})</p>
+                        <p><strong>Duration:</strong> ${days} Day(s)</p>
+                        <hr class="border-gray-600 my-2">
+                        <p>Base Rate: $${car.basePrice.toFixed(2)} x ${days} days = $${baseTotal.toFixed(2)}</p>
+                `;
+                if (surcharge > 0) html += `<p class="text-yellow-400">Sports Car Surcharge: +$${surcharge.toFixed(2)}</p>`;
+                if (discount > 0) html += `<p class="text-green-400">Long-Term Discount (10%): -$${discount.toFixed(2)}</p>`;
+                html += `
+                        <hr class="border-gray-600 my-2">
+                        <p class="text-2xl font-bold text-white">Total Price: $${finalPrice.toFixed(2)}</p>
+                    </div>
+                `;
+                return html;
+            },
+            
+            handleReturnCar() {
+                 this.clearMainContent();
+                const content = document.getElementById('main-content');
+                const rentedCars = this.activeRentals.map(r => r.car);
+                let html = `${this.renderBackButton()}<h2 class="text-3xl font-bold text-white mb-6">Return a Car</h2>`;
+                
+                if (rentedCars.length === 0) {
+                    html += `<div class="card p-8 rounded-lg text-center"><p>There are no cars currently rented.</p></div>`;
+                } else {
+                     html += `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">`;
+                     rentedCars.forEach(car => {
+                        const rental = this.activeRentals.find(r => r.car.id === car.id);
+                        html += `
+                            <div class="card p-4 rounded-lg flex flex-col justify-between">
+                                <div>
+                                    <p class="font-bold text-xl text-white">${car.brand} ${car.model}</p>
+                                    <p class="text-sm text-gray-400">Rented by: ${rental.customer.name}</p>
+                                </div>
+                                <button onclick="App.processReturn('${car.id}')" class="btn btn-primary mt-4 w-full py-2 rounded-md">Return This Car</button>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                }
+                content.innerHTML = html;
+            },
+
+            processReturn(carId) {
+                const rentalIndex = this.activeRentals.findIndex(r => r.car.id === carId);
+                if (rentalIndex === -1) return;
+                
+                const rental = this.activeRentals[rentalIndex];
+                
+                this.showModal("Confirm Return", `Are you sure you want to return the ${rental.car.brand} ${rental.car.model}?`, () => {
+                    rental.car.isAvailable = true;
+                    this.rentalHistory.push(new CompletedRental(rental));
+                    this.activeRentals.splice(rentalIndex, 1);
+                    this.showModal("Success!", "The car has been returned successfully.", () => this.handleReturnCar());
+                });
+            },
+
+            handleSearchCars() {
+                this.clearMainContent();
+                const content = document.getElementById('main-content');
+                content.innerHTML = `
+                    ${this.renderBackButton()}
+                    <h2 class="text-3xl font-bold text-white mb-4">Search & View Available Cars</h2>
+                    <div class="mb-6">
+                        <input type="text" id="search-input" class="form-input w-full p-3 rounded-md" placeholder="Search by brand, model, or type (e.g., Toyota, SUV)...">
+                    </div>
+                    <div id="car-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                `;
+
+                const searchInput = document.getElementById('search-input');
+                searchInput.addEventListener('keyup', () => this.renderCarList(searchInput.value));
+                this.renderCarList(''); // Initial render
+            },
+            
+            renderCarList(query) {
+                const listEl = document.getElementById('car-list');
+                const lowerQuery = query.toLowerCase().trim();
+                const terms = lowerQuery.split(/\s+/).filter(Boolean);
+
+                const availableCars = [...this.cars.values()].filter(c => c.isAvailable);
+
+                const filteredCars = terms.length === 0 ? availableCars : availableCars.filter(car => {
+                    const carDetails = `${car.brand} ${car.model} ${car.type}`.toLowerCase();
+                    return terms.every(term => carDetails.includes(term));
+                });
+
+                if (filteredCars.length === 0) {
+                    listEl.innerHTML = `<p class="col-span-full text-center text-gray-400 py-8">No available cars match your search.</p>`;
+                    return;
+                }
+
+                listEl.innerHTML = filteredCars.map(car => `
+                    <div class="card p-5 rounded-lg flex flex-col text-center items-center">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-blue-400">${car.type}</p>
+                        <h3 class="text-2xl font-bold text-white mt-1">${car.brand} ${car.model}</h3>
+                        <p class="text-3xl font-light my-4">$${car.basePrice.toFixed(2)}<span class="text-base text-gray-400">/day</span></p>
+                        <button onclick="App.handleRentSpecificCar('${car.id}')" class="btn btn-primary w-full py-2 rounded-md font-semibold mt-auto">Rent Now</button>
+                    </div>
+                `).join('');
+            },
+
+            handleRentSpecificCar(carId) {
+                this.handleRentCar();
+                // A brief timeout allows the DOM to update before we set the value
+                setTimeout(() => {
+                    document.getElementById('car-select').value = carId;
+                }, 100);
+            },
+            
+            handleViewRented() {
+                 this.clearMainContent();
+                const content = document.getElementById('main-content');
+                let html = `${this.renderBackButton()}<h2 class="text-3xl font-bold text-white mb-6">Currently Rented Cars</h2>`;
+                
+                if (this.activeRentals.length === 0) {
+                     html += `<div class="card p-8 rounded-lg text-center"><p>No cars are currently out for rent.</p></div>`;
+                } else {
+                     html += `<div class="space-y-4">`;
+                    this.activeRentals.forEach(rental => {
+                        html += `
+                            <div class="card p-4 rounded-lg md:flex justify-between items-center">
+                                <div>
+                                    <p class="font-bold text-xl text-white">${rental.car.brand} ${rental.car.model}</p>
+                                    <p class="text-sm text-gray-400">Rented by: <strong>${rental.customer.name}</strong> for ${rental.days} days.</p>
+                                    <p class="text-xs text-gray-500">Rented on: ${rental.rentalDate.toLocaleDateString()}</p>
+                                </div>
+                                <button onclick="App.processReturn('${rental.car.id}')" class="btn btn-secondary mt-4 md:mt-0 px-4 py-2 rounded-md">Return Car</button>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                }
+                content.innerHTML = html;
+            },
+            
+            handleRentalHistory() {
+                this.clearMainContent();
+                const content = document.getElementById('main-content');
+                let customerOptions = [...this.customers.values()].map(c => `<option value="${c.id}">${c.name} (${c.id})</option>`).join('');
+
+                content.innerHTML = `
+                    ${this.renderBackButton()}
+                    <h2 class="text-3xl font-bold text-white mb-6">View Rental History</h2>
+                     <div class="card p-8 rounded-lg">
+                        <div class="mb-4">
+                            <label for="history-customer-select" class="block mb-2 font-medium">Select a Customer</label>
+                            <select id="history-customer-select" class="form-input w-full p-2 rounded-md">${customerOptions}</select>
+                        </div>
+                        <div id="history-output" class="mt-6">
+                            <p class="text-gray-400 text-center">Select a customer to see their rental history.</p>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('history-customer-select').addEventListener('change', (e) => this.renderHistoryForCustomer(e.target.value));
+            },
+
+            renderHistoryForCustomer(customerId) {
+                const output = document.getElementById('history-output');
+                const history = this.rentalHistory.filter(r => r.customer.id === customerId);
+
+                if (history.length === 0) {
+                    output.innerHTML = `<p class="text-center py-4">No past rentals found for this customer.</p>`;
+                    return;
+                }
+
+                output.innerHTML = `
+                    <div class="space-y-3">
+                    ${history.map(r => `
+                        <div class="card p-3 rounded-md border-l-4 border-blue-500">
+                             <p class="font-semibold text-white">${r.car.brand} ${r.car.model}</p>
+                             <p class="text-sm">Rented: ${r.rentalDate.toLocaleDateString()} | Returned: ${r.returnDate.toLocaleDateString()}</p>
+                             <p class="text-sm">Total Price: <strong>$${r.finalPrice.toFixed(2)}</strong> for ${r.daysRented} days</p>
+                        </div>
+                    `).join('')}
+                    </div>
+                `;
+            },
+
+            handleManageCars() {
+                this.clearMainContent();
+                const content = document.getElementById('main-content');
+                content.innerHTML = `
+                    ${this.renderBackButton()}
+                    <div class="md:flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-bold text-white">Manage Cars</h2>
+                        <button onclick="App.showAddCarForm()" class="btn btn-primary mt-4 md:mt-0 px-4 py-2 rounded-md">Add New Car</button>
+                    </div>
+                    <div id="all-cars-list-container" class="space-y-3"></div>
+                `;
+                this.renderAllCarsList();
+            },
+
+            renderAllCarsList() {
+                const container = document.getElementById('all-cars-list-container');
+                 if (this.cars.size === 0) {
+                    container.innerHTML = `<div class="card p-8 rounded-lg text-center"><p>No cars found in the system.</p></div>`;
+                    return;
+                }
+                container.innerHTML = [...this.cars.values()].map(car => `
+                    <div class="card p-4 rounded-lg flex justify-between items-center">
+                        <div>
+                            <p class="font-semibold text-white">${car.brand} ${car.model} <span class="text-xs font-medium text-gray-400">(${car.id})</span></p>
+                            <p class="text-sm text-gray-400">Type: ${car.type} | Base Price: $${car.basePrice.toFixed(2)}/day</p>
+                        </div>
+                        <div class="text-right">
+                            ${car.isAvailable
+                                ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-300">Available</span>'
+                                : '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-300">Rented</span>'
+                            }
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            showAddCarForm() {
+                this.showModal(
+                    "Add New Car",
+                    `
+                    <form id="add-car-form" class="space-y-4 text-left">
+                        <div>
+                            <label for="new-car-id" class="block mb-2 font-medium">Car ID</label>
+                            <input type="text" id="new-car-id" required class="form-input w-full p-2 rounded-md" placeholder="e.g., C007">
+                            <p class="form-helper-text mt-1">Must be a unique identifier.</p>
+                        </div>
+                        <div>
+                            <label for="new-car-brand" class="block mb-2 font-medium">Brand</label>
+                            <input type="text" id="new-car-brand" required class="form-input w-full p-2 rounded-md" placeholder="e.g., Tesla">
+                        </div>
+                        <div>
+                            <label for="new-car-model" class="block mb-2 font-medium">Model</label>
+                            <input type="text" id="new-car-model" required class="form-input w-full p-2 rounded-md" placeholder="e.g., Model 3">
+                        </div>
+                        <div>
+                            <label for="new-car-price" class="block mb-2 font-medium">Base Price per Day</label>
+                            <input type="number" id="new-car-price" min="1" required class="form-input w-full p-2 rounded-md" placeholder="e.g., 120">
+                        </div>
+                        <div>
+                            <label for="new-car-type" class="block mb-2 font-medium">Car Type</label>
+                            <select id="new-car-type" class="form-input w-full p-2 rounded-md">
+                                <option>SEDAN</option>
+                                <option>SUV</option>
+                                <option>SPORTS</option>
+                                <option>HATCHBACK</option>
+                                <option>CONVERTIBLE</option>
+                            </select>
+                        </div>
+                    </form>
+                    `,
+                    () => {
+                        const id = document.getElementById('new-car-id').value.trim();
+                        const brand = document.getElementById('new-car-brand').value.trim();
+                        const model = document.getElementById('new-car-model').value.trim();
+                        const price = parseFloat(document.getElementById('new-car-price').value);
+                        const type = document.getElementById('new-car-type').value;
+
+                        if (!id || !brand || !model || isNaN(price) || price <= 0) {
+                            this.showModal("Error", "Please fill out all fields with valid data.");
+                            return false; 
+                        }
+                        if (this.cars.has(id)) {
+                             this.showModal("Error", "A car with this ID already exists. Please use a unique ID.");
+                            return false;
+                        }
+                        
+                        const newCar = new Car(id, brand, model, price, type);
+                        this.cars.set(newCar.id, newCar);
+                        this.renderAllCarsList();
+                    },
+                    "Add Car"
+                );
+            },
+            
+            handleManageCustomers() {
+                this.clearMainContent();
+                const content = document.getElementById('main-content');
+                let html = `
+                    ${this.renderBackButton()}
+                    <div class="md:flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-bold text-white">Manage Customers</h2>
+                        <button onclick="App.showAddCustomerForm()" class="btn btn-primary mt-4 md:mt-0 px-4 py-2 rounded-md">Add New Customer</button>
+                    </div>
+                    <div id="customer-list-container" class="space-y-3"></div>
+                `;
+                content.innerHTML = html;
+                this.renderCustomerList();
+            },
+
+            renderCustomerList() {
+                const container = document.getElementById('customer-list-container');
+                 if (this.customers.size === 0) {
+                    container.innerHTML = `<div class="card p-8 rounded-lg text-center"><p>No customers found.</p></div>`;
+                    return;
+                }
+                container.innerHTML = [...this.customers.values()].map(c => `
+                    <div class="card p-4 rounded-lg flex justify-between items-center">
+                        <div>
+                            <p class="font-semibold text-white">${c.name}</p>
+                            <p class="text-sm text-gray-400">ID: ${c.id} | Phone: ${c.phone}</p>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            showAddCustomerForm() {
+                this.showModal(
+                    "Add New Customer",
+                    `
+                    <form id="add-customer-form" class="space-y-4 text-left">
+                        <div>
+                            <label for="new-cust-name" class="block mb-2 font-medium">Full Name</label>
+                            <input type="text" id="new-cust-name" required class="form-input w-full p-2 rounded-md" placeholder="e.g., Peter Jones">
+                        </div>
+                         <div>
+                            <label for="new-cust-phone" class="block mb-2 font-medium">Phone Number</label>
+                            <input type="tel" id="new-cust-phone" required class="form-input w-full p-2 rounded-md" placeholder="e.g., 555-987-6543">
+                        </div>
+                    </form>
+                    `,
+                    () => {
+                        const name = document.getElementById('new-cust-name').value;
+                        const phone = document.getElementById('new-cust-phone').value;
+                        if (!name || !phone) {
+                            // This basic validation prevents submission via the button
+                            // A more robust solution would show an error message in the modal
+                            return false; 
+                        }
+                        const newId = "CUS" + String(this.customers.size + 1).padStart(3, '0');
+                        this.customers.set(newId, new Customer(newId, name, phone));
+                        this.renderCustomerList();
+                    },
+                    "Add Customer" // Custom confirm button text
+                );
+            },
+
+
+            // --- MODAL UTILITY ---
+            
+            showModal(title, message, onConfirm = null, confirmText = "Confirm") {
+                const modalContainer = document.getElementById('modal-container');
+                let buttonsHTML = `<button id="modal-close-btn" class="btn btn-secondary px-4 py-2 rounded-md">Close</button>`;
+                if (onConfirm) {
+                    buttonsHTML = `
+                        <button id="modal-cancel-btn" class="btn btn-secondary px-4 py-2 rounded-md">Cancel</button>
+                        <button id="modal-confirm-btn" class="btn btn-primary px-4 py-2 rounded-md">${confirmText}</button>
+                    `;
+                }
+                
+                modalContainer.innerHTML = `
+                    <div class="modal-content w-full max-w-md p-6 rounded-lg shadow-2xl text-center">
+                        <h3 class="text-2xl font-bold text-white mb-4">${title}</h3>
+                        <div class="text-gray-300 mb-6">${message}</div>
+                        <div class="flex justify-center gap-4">
+                            ${buttonsHTML}
+                        </div>
+                    </div>
+                `;
+                
+                modalContainer.classList.remove('hidden');
+                modalContainer.classList.add('flex');
+
+                const closeModal = () => {
+                    modalContainer.classList.add('hidden');
+                    modalContainer.classList.remove('flex');
+                    modalContainer.innerHTML = '';
+                };
+                
+                if (onConfirm) {
+                    document.getElementById('modal-confirm-btn').onclick = () => {
+                        // For modals with forms, we might not want to close immediately if validation fails.
+                        // The onConfirm function can return `false` to prevent closing.
+                        if (onConfirm() !== false) {
+                            // If the confirm action has its own subsequent modal (like an error message),
+                            // we delay closing the current one slightly to avoid a visual flash.
+                            setTimeout(closeModal, 100);
+                        }
+                    };
+                    document.getElementById('modal-cancel-btn').onclick = closeModal;
+                } else {
+                    document.getElementById('modal-close-btn').onclick = closeModal;
+                }
+            }
+        };
+
+        // Start the application once the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.App = App; // Make App globally accessible for inline event handlers
+            App.init();
+        });
+
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,75 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #111827; /* Dark gray-blue background */
+    color: #d1d5db; /* Light gray text for readability */
+}
+
+/* Custom scrollbar for a more integrated look */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* Styling for form inputs */
+.form-input {
+    background-color: #1f2937;
+    border: 1px solid #4b5563;
+    color: #d1d5db;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+.form-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+}
+
+/* Button styles for primary and secondary actions */
+.btn {
+    transition: background-color 0.3s, transform 0.2s;
+}
+.btn:hover {
+    transform: translateY(-2px);
+}
+.btn-primary {
+    background-color: #2563eb;
+    color: white;
+}
+.btn-primary:hover {
+    background-color: #1d4ed8;
+}
+.btn-secondary {
+     background-color: #4b5563;
+     color: white;
+}
+.btn-secondary:hover {
+    background-color: #6b7280;
+}
+
+/* Card styles for displaying information */
+.card {
+    background-color: #1f2937;
+    border: 1px solid #374151;
+}
+
+/* Modal styles for pop-up confirmations and messages */
+.modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.7);
+}
+.modal-content {
+    background-color: #1f2937;
+}
+
+/* Small helper text below form inputs */
+.form-helper-text {
+    font-size: 0.8rem;
+    color: #9ca3af;
+}
